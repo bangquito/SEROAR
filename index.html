@@ -6,10 +6,10 @@
     name="viewport"
     content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"
   />
-  <title>WebXR AR Box</title>
-
+  <title>MindAR Box</title>
   <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
-
+  <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-aframe.prod.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/aframe-extras@7.4.0/dist/aframe-extras.min.js"></script>
   <style>
     html, body {
       margin: 0;
@@ -19,14 +19,15 @@
       background: transparent;
       font-family: Arial, sans-serif;
     }
-
+    body {
+      position: relative;
+    }
     .example-container {
       width: 100vw;
       height: 100vh;
       overflow: hidden;
       position: relative;
     }
-
     .scanning {
       position: absolute;
       top: 20px;
@@ -38,207 +39,34 @@
       background: rgba(0, 0, 0, 0.65);
       color: #fff;
       font-size: 14px;
-      text-align: center;
-      white-space: nowrap;
-    }
-
-    .enter-ar {
-      position: absolute;
-      bottom: 24px;
-      left: 50%;
-      transform: translateX(-50%);
-      z-index: 3;
-      padding: 12px 18px;
-      border: 0;
-      border-radius: 999px;
-      background: rgba(0, 0, 0, 0.8);
-      color: #fff;
-      font-size: 14px;
-      cursor: pointer;
-    }
-
-    .hidden {
-      display: none;
     }
   </style>
 </head>
 <body>
   <div class="example-container">
-    <div class="scanning" id="scanHint">Move phone to find a surface, then tap to place</div>
-    <button class="enter-ar" id="enterAR">Enter AR</button>
-
+    <div class="scanning">Point camera at the target image</div>
     <a-scene
-      embedded
-      renderer="colorManagement: true; physicallyCorrectLights: true"
+      mindar-image="imageTargetSrc: target.mind; autoStart: true; uiScanning: true; uiLoading: true;"
+      color-space="sRGB"
+      renderer="colorManagement: true, physicallyCorrectLights"
       vr-mode-ui="enabled: false"
       device-orientation-permission-ui="enabled: false"
-      webxr="requiredFeatures: hit-test; optionalFeatures: anchors, local-floor;"
-      xr-mode-ui="enabled: false"
+      embedded
     >
       <a-assets>
         <a-asset-item id="boxModel" src="SERO.glb"></a-asset-item>
       </a-assets>
-
-      <a-camera position="0 1.6 0" look-controls="enabled: false"></a-camera>
-
-      <!-- Reticle -->
-      <a-ring
-        id="reticle"
-        visible="false"
-        position="0 0 -1"
-        rotation="-90 0 0"
-        radius-inner="0.05"
-        radius-outer="0.07"
-        material="color: #ffffff; shader: flat; opacity: 0.9"
-      ></a-ring>
-
-      <!-- Model -->
-      <a-entity
-        id="model"
-        gltf-model="#boxModel"
-        animation-mixer="clip: *; loop: repeat"
-        position="0 0 0"
-        rotation="-90 0 180"
-        scale="0.1 0.1 0.1"
-        visible="false"
-      ></a-entity>
+      <a-camera position="0 0 0" look-controls="enabled: false"></a-camera>
+      <a-entity mindar-image-target="targetIndex: 0">
+        <a-entity
+          gltf-model="#boxModel"
+          animation-mixer="clip: *; loop: repeat"
+          position="0 0 0"
+          rotation="-90 0 180"
+          scale="0.05 0.05 0.05"
+        ></a-entity>
+      </a-entity>
     </a-scene>
   </div>
-
-  <script>
-    const sceneEl = document.querySelector("a-scene");
-    const enterARBtn = document.getElementById("enterAR");
-    const scanHint = document.getElementById("scanHint");
-    const reticle = document.getElementById("reticle");
-    const model = document.getElementById("model");
-
-    let xrSession = null;
-    let xrRefSpace = null;
-    let viewerSpace = null;
-    let hitTestSource = null;
-    let placed = false;
-    let anchor = null;
-
-    async function startAR() {
-      if (!navigator.xr) {
-        alert("WebXR is not supported on this device/browser.");
-        return;
-      }
-
-      const supported = await navigator.xr.isSessionSupported("immersive-ar");
-      if (!supported) {
-        alert("Immersive AR is not supported on this device/browser.");
-        return;
-      }
-
-      sceneEl.enterAR();
-    }
-
-    enterARBtn.addEventListener("click", startAR);
-
-    sceneEl.addEventListener("enter-vr", async () => {
-      xrSession = sceneEl.renderer.xr.getSession();
-
-      if (!xrSession) return;
-
-      enterARBtn.classList.add("hidden");
-
-      xrRefSpace = await xrSession.requestReferenceSpace("local");
-      viewerSpace = await xrSession.requestReferenceSpace("viewer");
-      hitTestSource = await xrSession.requestHitTestSource({ space: viewerSpace });
-
-      xrSession.addEventListener("select", onSelect);
-      xrSession.addEventListener("end", onSessionEnd);
-
-      sceneEl.renderer.setAnimationLoop(onXRFrame);
-    });
-
-    function onSessionEnd() {
-      xrSession = null;
-      xrRefSpace = null;
-      viewerSpace = null;
-      hitTestSource = null;
-      anchor = null;
-      placed = false;
-
-      reticle.setAttribute("visible", false);
-      model.setAttribute("visible", false);
-      enterARBtn.classList.remove("hidden");
-      scanHint.textContent = "Move phone to find a surface, then tap to place";
-      scanHint.style.display = "block";
-    }
-
-    async function onSelect() {
-      if (!xrSession || !xrRefSpace) return;
-      if (!reticle.getAttribute("visible")) return;
-
-      const reticleObj = reticle.object3D;
-      const modelObj = model.object3D;
-
-      modelObj.position.copy(reticleObj.position);
-      modelObj.quaternion.copy(reticleObj.quaternion);
-      modelObj.scale.set(0.1, 0.1, 0.1);
-
-      model.setAttribute("visible", true);
-      placed = true;
-      scanHint.style.display = "none";
-
-      // Try to create a real XR anchor if supported
-      try {
-        const frame = sceneEl.frame;
-        if (frame && reticleObj.matrixWorld && xrRefSpace) {
-          const mat = new XRRigidTransform({
-            x: modelObj.position.x,
-            y: modelObj.position.y,
-            z: modelObj.position.z
-          });
-          if (frame.createAnchor) {
-            anchor = await frame.createAnchor(mat, xrRefSpace);
-          }
-        }
-      } catch (e) {
-        console.log("Anchor creation not available, using fixed local placement only.", e);
-      }
-    }
-
-    function onXRFrame(time, frame) {
-      sceneEl.frame = frame;
-
-      if (!frame || !xrRefSpace || !hitTestSource) return;
-
-      const hitTestResults = frame.getHitTestResults(hitTestSource);
-
-      if (!placed) {
-        if (hitTestResults.length > 0) {
-          const hit = hitTestResults[0];
-          const pose = hit.getPose(xrRefSpace);
-
-          if (pose) {
-            reticle.setAttribute("visible", true);
-
-            const pos = pose.transform.position;
-            const ori = pose.transform.orientation;
-
-            reticle.object3D.position.set(pos.x, pos.y, pos.z);
-            reticle.object3D.quaternion.set(ori.x, ori.y, ori.z, ori.w);
-          }
-        } else {
-          reticle.setAttribute("visible", false);
-        }
-      }
-
-      // If anchor exists, keep model synced to the anchor pose
-      if (anchor) {
-        const anchorPose = frame.getPose(anchor.anchorSpace, xrRefSpace);
-        if (anchorPose) {
-          const pos = anchorPose.transform.position;
-          const ori = anchorPose.transform.orientation;
-
-          model.object3D.position.set(pos.x, pos.y, pos.z);
-          model.object3D.quaternion.set(ori.x, ori.y, ori.z, ori.w);
-        }
-      }
-    }
-  </script>
 </body>
 </html>
