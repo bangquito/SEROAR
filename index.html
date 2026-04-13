@@ -12,22 +12,47 @@
   <script src="https://cdn.jsdelivr.net/npm/aframe-extras@7.4.0/dist/aframe-extras.min.js"></script>
 
   <script>
-    AFRAME.registerComponent('keep-visible', {
+    AFRAME.registerComponent("sticky-anchor", {
       init: function () {
-        this.found = false;
-        const el = this.el;
+        this.targetEl = document.querySelector("#imageTarget");
+        this.trackerEl = document.querySelector("#tracker");
+        this.scanHint = document.getElementById("scanHint");
 
-        el.addEventListener('targetFound', () => {
-          this.found = true;
-          document.getElementById('scanHint').style.display = 'none';
-        });
-      },
-      tick: function () {
-        // Once found, forcibly keep object3D visible every frame
-        // This overrides MindAR's internal hide on targetLost
-        if (this.found) {
+        this.isTracking = false;
+
+        this.worldPos = new THREE.Vector3();
+        this.worldQuat = new THREE.Quaternion();
+        this.worldScale = new THREE.Vector3();
+
+        this.targetEl.addEventListener("targetFound", () => {
+          this.isTracking = true;
+          if (this.scanHint) this.scanHint.style.display = "none";
           this.el.object3D.visible = true;
-        }
+        });
+
+        this.targetEl.addEventListener("targetLost", () => {
+          this.isTracking = false;
+          this.el.object3D.visible = true;
+        });
+
+        this.el.object3D.visible = false;
+      },
+
+      tick: function () {
+        if (!this.isTracking) return;
+
+        const source = this.trackerEl.object3D;
+        const dest = this.el.object3D;
+
+        source.updateWorldMatrix(true, false);
+
+        source.getWorldPosition(this.worldPos);
+        source.getWorldQuaternion(this.worldQuat);
+        source.getWorldScale(this.worldScale);
+
+        dest.position.copy(this.worldPos);
+        dest.quaternion.copy(this.worldQuat);
+        dest.scale.copy(this.worldScale);
       }
     });
   </script>
@@ -64,10 +89,11 @@
 <body>
   <div class="example-container">
     <div class="scanning" id="scanHint">Point camera at the target image</div>
+
     <a-scene
       mindar-image="imageTargetSrc: target.mind; autoStart: true; uiScanning: true; uiLoading: true;"
       color-space="sRGB"
-      renderer="colorManagement: true, physicallyCorrectLights"
+      renderer="colorManagement: true; physicallyCorrectLights: true"
       vr-mode-ui="enabled: false"
       device-orientation-permission-ui="enabled: false"
       embedded
@@ -75,12 +101,24 @@
       <a-assets>
         <a-asset-item id="boxModel" src="SERO.glb"></a-asset-item>
       </a-assets>
+
       <a-camera position="0 0 0" look-controls="enabled: false"></a-camera>
 
-      <a-entity mindar-image-target="targetIndex: 0" keep-visible>
+      <!-- Persistent anchor -->
+      <a-entity id="worldAnchor" sticky-anchor>
         <a-entity
           gltf-model="#boxModel"
           animation-mixer="clip: *; loop: repeat"
+          position="0 0 0"
+          rotation="-90 0 180"
+          scale="0.1 0.1 0.1"
+        ></a-entity>
+      </a-entity>
+
+      <!-- MindAR tracked target -->
+      <a-entity id="imageTarget" mindar-image-target="targetIndex: 0">
+        <a-entity
+          id="tracker"
           position="0 0 0"
           rotation="-90 0 180"
           scale="0.1 0.1 0.1"
