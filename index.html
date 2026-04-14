@@ -2,71 +2,392 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta
-    name="viewport"
-    content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"
-  />
-  <title>MindAR Box</title>
-  <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-aframe.prod.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/aframe-extras@7.4.0/dist/aframe-extras.min.js"></script>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="theme-color" content="#080808" />
+  <meta name="description" content="SERO — 3D model viewer with AR. View in your space." />
+  <title>SERO — kolibri-studio</title>
+
+  <!-- model-viewer -->
+  <script type="module" src="https://ajax.googleapis.com/ajax/libs/model-viewer/3.4.0/model-viewer.min.js"></script>
+
+  <!-- Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Mono:wght@300;400&display=swap" rel="stylesheet" />
+
   <style>
-    html, body {
-      margin: 0;
+    /* ── Reset ── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { width: 100%; height: 100%; overflow: hidden; background: #080808; }
+
+    /* ── Tokens ── */
+    :root {
+      --bg:       #080808;
+      --surface:  #0f0f0f;
+      --border:   rgba(255,255,255,0.07);
+      --accent:   #c8f04a;
+      --muted:    rgba(255,255,255,0.3);
+      --text:     rgba(255,255,255,0.88);
+      --mono:     'DM Mono', monospace;
+      --display:  'Bebas Neue', sans-serif;
+    }
+
+    /* ── Grain overlay ── */
+    body::before {
+      content: '';
+      position: fixed; inset: 0; z-index: 0; pointer-events: none;
+      background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='1'/%3E%3C/svg%3E");
+      background-size: 180px 180px;
+      opacity: 0.04;
+    }
+
+    /* ── model-viewer fills the screen ── */
+    model-viewer {
+      position: fixed;
+      inset: 0;
       width: 100%;
       height: 100%;
-      overflow: hidden;
       background: transparent;
-      font-family: Arial, sans-serif;
+      --poster-color: transparent;
+      z-index: 1;
     }
-    body {
-      position: relative;
+
+    /* ── Top bar ── */
+    .topbar {
+      position: fixed;
+      top: 0; left: 0; right: 0;
+      z-index: 10;
+      padding: 20px 28px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      pointer-events: none;
+      animation: fadeUp 0.7s ease both;
     }
-    .example-container {
-      width: 100vw;
-      height: 100vh;
-      overflow: hidden;
-      position: relative;
+
+    .logo {
+      font-family: var(--display);
+      font-size: 22px;
+      letter-spacing: 0.12em;
+      color: var(--accent);
+      pointer-events: auto;
     }
-    .scanning {
-      position: absolute;
-      top: 20px;
+    .logo span {
+      color: var(--muted);
+      font-family: var(--mono);
+      font-size: 10px;
+      letter-spacing: 0.25em;
+      margin-left: 10px;
+      vertical-align: middle;
+    }
+
+    .status-pill {
+      font-family: var(--mono);
+      font-size: 10px;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      color: var(--accent);
+      background: rgba(200,240,74,0.08);
+      border: 1px solid rgba(200,240,74,0.2);
+      padding: 5px 12px;
+      border-radius: 20px;
+      pointer-events: none;
+    }
+
+    /* ── Bottom info ── */
+    .bottom {
+      position: fixed;
+      bottom: 0; left: 0; right: 0;
+      z-index: 10;
+      padding: 24px 28px;
+      display: flex;
+      align-items: flex-end;
+      justify-content: space-between;
+      pointer-events: none;
+      animation: fadeUp 0.9s ease 0.2s both;
+    }
+
+    .model-info {
+      pointer-events: none;
+    }
+    .model-name {
+      font-family: var(--display);
+      font-size: clamp(52px, 10vw, 88px);
+      letter-spacing: 0.05em;
+      color: var(--text);
+      line-height: 1;
+      text-shadow: 0 0 80px rgba(200,240,74,0.08);
+    }
+    .model-sub {
+      font-family: var(--mono);
+      font-size: 11px;
+      letter-spacing: 0.2em;
+      color: var(--muted);
+      margin-top: 4px;
+    }
+
+    /* ── AR Button (custom slot) ── */
+    #ar-button {
+      pointer-events: auto;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      background: var(--accent);
+      color: #080808;
+      border: none;
+      font-family: var(--mono);
+      font-size: 11px;
+      font-weight: 400;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      padding: 14px 22px;
+      border-radius: 4px;
+      cursor: pointer;
+      transition: transform 0.15s, opacity 0.15s;
+      white-space: nowrap;
+      margin-bottom: 4px;
+    }
+    #ar-button:hover  { transform: translateY(-2px); opacity: 0.9; }
+    #ar-button:active { transform: scale(0.97); }
+    #ar-button svg { width: 16px; height: 16px; flex-shrink: 0; }
+
+    /* Hide AR button when not available */
+    #ar-button[data-hidden] { display: none; }
+
+    /* ── Controls hint ── */
+    .hint {
+      position: fixed;
+      bottom: 110px;
       left: 50%;
       transform: translateX(-50%);
-      z-index: 2;
-      padding: 10px 14px;
-      border-radius: 999px;
-      background: rgba(0, 0, 0, 0.65);
-      color: #fff;
-      font-size: 14px;
+      z-index: 10;
+      font-family: var(--mono);
+      font-size: 10px;
+      letter-spacing: 0.18em;
+      color: var(--muted);
+      text-transform: uppercase;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      animation: fadeUp 1.1s ease 0.5s both;
+      pointer-events: none;
+      transition: opacity 0.5s;
+    }
+    .hint.hide { opacity: 0; }
+    .hint::before, .hint::after {
+      content: '';
+      width: 28px; height: 1px;
+      background: var(--border);
+    }
+
+    /* ── AR session overlay ── */
+    #ar-overlay {
+      position: fixed;
+      inset: 0;
+      z-index: 20;
+      background: rgba(8,8,8,0.6);
+      backdrop-filter: blur(4px);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      flex-direction: column;
+      gap: 16px;
+    }
+    #ar-overlay.active { display: flex; }
+    #ar-overlay p {
+      font-family: var(--mono);
+      font-size: 12px;
+      letter-spacing: 0.18em;
+      color: var(--muted);
+      text-transform: uppercase;
+    }
+    .pulse-ring {
+      width: 56px; height: 56px;
+      border: 1.5px solid var(--accent);
+      border-radius: 50%;
+      animation: pulse 1.4s ease-out infinite;
+    }
+    @keyframes pulse {
+      0%   { transform: scale(0.9); opacity: 1; }
+      100% { transform: scale(1.5); opacity: 0; }
+    }
+
+    /* ── Progress bar (loading) ── */
+    #loader {
+      position: fixed;
+      top: 0; left: 0; right: 0;
+      height: 2px;
+      z-index: 30;
+      background: rgba(200,240,74,0.12);
+    }
+    #loader-bar {
+      height: 100%;
+      background: var(--accent);
+      width: 0%;
+      transition: width 0.2s ease;
+    }
+
+    /* ── Keyframes ── */
+    @keyframes fadeUp {
+      from { opacity: 0; transform: translateY(12px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+
+    /* ── Mobile safe areas ── */
+    @supports (padding-bottom: env(safe-area-inset-bottom)) {
+      .bottom { padding-bottom: calc(24px + env(safe-area-inset-bottom)); }
+      .topbar { padding-top: calc(20px + env(safe-area-inset-top)); }
+    }
+
+    /* ── Error state ── */
+    #error-msg {
+      position: fixed;
+      inset: 0; z-index: 40;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      flex-direction: column;
+      gap: 12px;
+      background: var(--bg);
+    }
+    #error-msg.show { display: flex; }
+    #error-msg p {
+      font-family: var(--mono);
+      font-size: 12px;
+      color: var(--muted);
+      letter-spacing: 0.15em;
+    }
+    #error-msg strong {
+      font-family: var(--display);
+      font-size: 28px;
+      color: var(--text);
+      letter-spacing: 0.1em;
     }
   </style>
 </head>
 <body>
-  <div class="example-container">
-    <div class="scanning">Point camera at the target image</div>
-    <a-scene
-      mindar-image="imageTargetSrc: target.mind; autoStart: true; uiScanning: true; uiLoading: true;"
-      color-space="sRGB"
-      renderer="colorManagement: true, physicallyCorrectLights"
-      vr-mode-ui="enabled: false"
-      device-orientation-permission-ui="enabled: false"
-      embedded
-    >
-      <a-assets>
-        <a-asset-item id="boxModel" src="SERO.glb"></a-asset-item>
-      </a-assets>
-      <a-camera position="0 0 0" look-controls="enabled: false"></a-camera>
-      <a-entity mindar-image-target="targetIndex: 0">
-        <a-entity
-          gltf-model="#boxModel"
-          animation-mixer="clip: *; loop: repeat"
-          position="-1 -1 0"
-          rotation="0 90 0"
-          scale="0.05 0.05 0.05"
-        ></a-entity>
-      </a-entity>
-    </a-scene>
+
+  <!-- Loading bar -->
+  <div id="loader"><div id="loader-bar"></div></div>
+
+  <!-- model-viewer -->
+  <model-viewer
+    id="viewer"
+    src="SERO.glb"
+    ios-src="SERO.usdz"
+    ar
+    ar-modes="webxr scene-viewer quick-look"
+    ar-scale="auto"
+    camera-controls
+    auto-rotate
+    auto-rotate-delay="2000"
+    rotation-per-second="12deg"
+    shadow-intensity="1"
+    shadow-softness="0.8"
+    exposure="1"
+    environment-image="neutral"
+    alt="SERO — 3D model by kolibri-studio"
+  >
+    <!-- Custom AR button injected into slot -->
+    <button slot="ar-button" id="ar-button">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M2 8V5a2 2 0 012-2h3M22 8V5a2 2 0 00-2-2h-3M2 16v3a2 2 0 002 2h3M22 16v3a2 2 0 01-2 2h-3"/>
+        <path d="M12 8l-4 2.3v4.4L12 17l4-2.3V10.3L12 8z"/>
+      </svg>
+      View in AR
+    </button>
+  </model-viewer>
+
+  <!-- Top bar -->
+  <header class="topbar">
+    <div class="logo">kolibri<span>studio</span></div>
+    <div class="status-pill" id="status-pill">loading</div>
+  </header>
+
+  <!-- Bottom info + AR trigger -->
+  <div class="bottom">
+    <div class="model-info">
+      <div class="model-name">SERO</div>
+      <div class="model-sub">3D model · drag to orbit · pinch to zoom</div>
+    </div>
   </div>
+
+  <!-- Drag hint -->
+  <div class="hint" id="hint">drag to explore</div>
+
+  <!-- AR session overlay (shown while AR is active) -->
+  <div id="ar-overlay">
+    <div class="pulse-ring"></div>
+    <p>scanning surface — tap to place</p>
+  </div>
+
+  <!-- Error fallback -->
+  <div id="error-msg">
+    <strong>SERO.glb</strong>
+    <p>model not found — place SERO.glb in the same folder</p>
+  </div>
+
+  <script>
+    const viewer     = document.getElementById('viewer');
+    const loaderBar  = document.getElementById('loader-bar');
+    const statusPill = document.getElementById('status-pill');
+    const hint       = document.getElementById('hint');
+    const arOverlay  = document.getElementById('ar-overlay');
+    const arBtn      = document.getElementById('ar-button');
+    const errorMsg   = document.getElementById('error-msg');
+
+    /* ── Loading progress ── */
+    viewer.addEventListener('progress', (e) => {
+      const pct = Math.round(e.detail.totalProgress * 100);
+      loaderBar.style.width = pct + '%';
+      statusPill.textContent = pct + '%';
+    });
+
+    /* ── Model loaded ── */
+    viewer.addEventListener('load', () => {
+      loaderBar.style.opacity = '0';
+      statusPill.textContent  = 'ready';
+      setTimeout(() => statusPill.style.opacity = '0.4', 2000);
+    });
+
+    /* ── Model load error ── */
+    viewer.addEventListener('error', () => {
+      errorMsg.classList.add('show');
+    });
+
+    /* ── Hide hint after first interaction ── */
+    let hintDismissed = false;
+    viewer.addEventListener('camera-change', () => {
+      if (!hintDismissed) {
+        hintDismissed = true;
+        hint.classList.add('hide');
+      }
+    });
+
+    /* ── AR status ── */
+    viewer.addEventListener('ar-status', (e) => {
+      const s = e.detail.status;
+      if (s === 'session-started') {
+        arOverlay.classList.add('active');
+        statusPill.textContent = 'AR active';
+        statusPill.style.opacity = '1';
+      }
+      if (s === 'object-placed' || s === 'not-presenting') {
+        arOverlay.classList.remove('active');
+        statusPill.textContent  = 'ready';
+        statusPill.style.opacity = '0.4';
+      }
+      if (s === 'failed') {
+        statusPill.textContent = 'AR unavailable';
+      }
+    });
+
+    /* ── Hide AR button if not supported ── */
+    viewer.addEventListener('load', () => {
+      if (!viewer.canActivateAR) {
+        arBtn.setAttribute('data-hidden', '');
+      }
+    });
+  </script>
 </body>
 </html>
